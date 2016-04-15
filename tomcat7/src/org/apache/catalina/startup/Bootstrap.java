@@ -67,7 +67,9 @@ public final class Bootstrap {
 	ClassLoader sharedLoader = null;
 
 	// -------------------------------------------------------- Private Methods
-
+    /**
+     * 初始化类加载器
+     */
 	private void initClassLoaders() {
 		try {
 			commonLoader = createClassLoader("common", null);
@@ -84,16 +86,22 @@ public final class Bootstrap {
 			System.exit(1);
 		}
 	}
-
+    /**
+     * 创建类 加载器
+     * @param name
+     * @param parent
+     * @return
+     * @throws Exception
+     */
 	private ClassLoader createClassLoader(String name, ClassLoader parent) throws Exception {
 
-		String value = CatalinaProperties.getProperty(name + ".loader");
+		String value = CatalinaProperties.getProperty(name + ".loader"); //从conf/catalia.properties配置文件中读取值
 		if ((value == null) || (value.equals("")))
 			return parent;
 
 		value = replace(value);
 
-		List<Repository> repositories = new ArrayList<Repository>();
+		List<Repository> repositories = new ArrayList<Repository>();//Repository 封装了 资源路径 和其类型  
 
 		StringTokenizer tokenizer = new StringTokenizer(value, ",");
 		while (tokenizer.hasMoreElements()) {
@@ -122,7 +130,14 @@ public final class Bootstrap {
 				repositories.add(new Repository(repository, RepositoryType.DIR));
 			}
 		}
-
+		//加载tomcat需要的第3方的 jar 包  
+		//tomcat7/lib/ 
+		//ant-1.7.0.jar
+		//ant-launcher-1.7.0.jar
+		//ecj-4.2.2.jar 
+		//jaxrpc-api-1.1.jar  
+		//junit-4.4.jar 
+		//wsdl4j-1.6.2.jar 
 		return ClassLoaderFactory.createClassLoader(repositories, parent);
 	}
 
@@ -178,16 +193,23 @@ public final class Bootstrap {
 	public void init() throws Exception {
 
 		// Set Catalina path
-		setCatalinaHome();
-		setCatalinaBase();
-
+		setCatalinaHome();//设置 系统属性 key=catalina.home value=项目绝对路径
+		setCatalinaBase();//设置 系统属性 key=catalina.base value=项目绝对路径
+		/*初始化   commonLoader catalinaLoader sharedLoader 3个类加载器
+		       加载tomcat需要的第3方jar包里面类
+		 */
 		initClassLoaders();
+		 
 
 		Thread.currentThread().setContextClassLoader(catalinaLoader);
 
 		SecurityClassLoad.securityClassLoad(catalinaLoader);
 
 		// Load our startup class and call its process() method
+		//反射创建 Catalina 对象 执行setParentClassLoader()方法.
+		//catalinaDaemon 属性被赋值
+		
+		
 		if (log.isDebugEnabled())
 			log.debug("Loading startup class");
 		Class<?> startupClass = catalinaLoader.loadClass("org.apache.catalina.startup.Catalina");
@@ -340,72 +362,7 @@ public final class Bootstrap {
 
 	}
 
-	/**
-	 * Main method and entry point when starting Tomcat via the provided
-	 * scripts.
-	 *
-	 * @param args
-	 *            Command line arguments to be processed
-	 */
-	public static void main(String args[]) {
-
-		if (daemon == null) {
-			// Don't set daemon until init() has completed
-			Bootstrap bootstrap = new Bootstrap();
-			try {
-				bootstrap.init();
-			} catch (Throwable t) {
-				handleThrowable(t);
-				t.printStackTrace();
-				return;
-			}
-			daemon = bootstrap;
-		} else {
-			// When running as a service the call to stop will be on a new
-			// thread so make sure the correct class loader is used to prevent
-			// a range of class not found exceptions.
-			Thread.currentThread().setContextClassLoader(daemon.catalinaLoader);
-		}
-
-		try {
-			String command = "start";
-			if (args.length > 0) {
-				command = args[args.length - 1];
-			}
-
-			if (command.equals("startd")) {
-				args[args.length - 1] = "start";
-				daemon.load(args);
-				daemon.start();
-			} else if (command.equals("stopd")) {
-				args[args.length - 1] = "stop";
-				daemon.stop();
-			} else if (command.equals("start")) {
-				daemon.setAwait(true);
-				daemon.load(args);
-				daemon.start();
-			} else if (command.equals("stop")) {
-				daemon.stopServer(args);
-			} else if (command.equals("configtest")) {
-				daemon.load(args);
-				if (null == daemon.getServer()) {
-					System.exit(1);
-				}
-				System.exit(0);
-			} else {
-				log.warn("Bootstrap: command \"" + command + "\" does not exist.");
-			}
-		} catch (Throwable t) {
-			// Unwrap the Exception for clearer error reporting
-			if (t instanceof InvocationTargetException && t.getCause() != null) {
-				t = t.getCause();
-			}
-			handleThrowable(t);
-			t.printStackTrace();
-			System.exit(1);
-		}
-
-	}
+	
 
 	public void setCatalinaHome(String s) {
 		System.setProperty(Globals.CATALINA_HOME_PROP, s);
@@ -433,7 +390,11 @@ public final class Bootstrap {
 	/**
 	 * Set the <code>catalina.home</code> System property to the current working
 	 * directory if it has not been set.
+	 * 
+	 * 设置 系统属性  key=catalina.home ,value是项目文件全路径
 	 */
+	
+	
 	private void setCatalinaHome() {
 
 		if (System.getProperty(Globals.CATALINA_HOME_PROP) != null)
@@ -475,5 +436,71 @@ public final class Bootstrap {
 			throw (VirtualMachineError) t;
 		}
 		// All other instances of Throwable will be silently swallowed
+	}
+	/**
+	 * Main method and entry point when starting Tomcat via the provided
+	 * scripts.
+	 *
+	 * @param args
+	 *            Command line arguments to be processed
+	 */
+	public static void main(String args[]) {
+
+		if (daemon == null) {
+			// Don't set daemon until init() has completed
+			Bootstrap bootstrap = new Bootstrap();
+			try {
+				bootstrap.init(); 
+			} catch (Throwable t) {
+				handleThrowable(t);
+				t.printStackTrace();
+				return;
+			}
+			daemon = bootstrap;
+		} else {
+			// When running as a service the call to stop will be on a new
+			// thread so make sure the correct class loader is used to prevent
+			// a range of class not found exceptions.
+			Thread.currentThread().setContextClassLoader(daemon.catalinaLoader);
+		}
+
+		try {
+			String command = "start";
+			if (args.length > 0) {
+				command = args[args.length - 1];
+			}
+
+			if (command.equals("startd")) {
+				args[args.length - 1] = "start";
+				daemon.load(args);
+				daemon.start();
+			} else if (command.equals("stopd")) {
+				args[args.length - 1] = "stop";
+				daemon.stop();
+			} else if (command.equals("start")) {
+				daemon.setAwait(true); //设置 catalina 的 await = true;
+				daemon.load(args); 
+				daemon.start();
+			} else if (command.equals("stop")) {
+				daemon.stopServer(args);
+			} else if (command.equals("configtest")) {
+				daemon.load(args);
+				if (null == daemon.getServer()) {
+					System.exit(1);
+				}
+				System.exit(0);
+			} else {
+				log.warn("Bootstrap: command \"" + command + "\" does not exist.");
+			}
+		} catch (Throwable t) {
+			// Unwrap the Exception for clearer error reporting
+			if (t instanceof InvocationTargetException && t.getCause() != null) {
+				t = t.getCause();
+			}
+			handleThrowable(t);
+			t.printStackTrace();
+			System.exit(1);
+		}
+
 	}
 }
